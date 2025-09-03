@@ -26,6 +26,7 @@ import fr.cnes.sonar.report.exceptions.BadExportationDataTypeException;
 import fr.cnes.sonar.report.exceptions.BadSonarQubeRequestException;
 import fr.cnes.sonar.report.exceptions.SonarQubeException;
 import fr.cnes.sonar.report.exceptions.UnknownQualityGateException;
+import fr.cnes.sonar.report.exceptions.UnsupportedSonarqubeResponseException;
 import fr.cnes.sonar.report.factory.ReportFactory;
 import fr.cnes.sonar.report.utils.StringManager;
 import org.apache.commons.io.FileUtils;
@@ -80,7 +81,8 @@ public class ExportTask implements RequestHandler {
      */
     @Override
     public void handle(Request request, Response response) throws BadExportationDataTypeException, IOException,
-            UnknownQualityGateException, OpenXML4JException, XmlException, SonarQubeException, ParseException {
+            UnknownQualityGateException, OpenXML4JException, XmlException, SonarQubeException, ParseException,
+            UnsupportedSonarqubeResponseException, Exception {
 
         // Get project key
         String projectKey = request.getParam(PluginStringManager.getProperty("api.report.args.key")).getValue();
@@ -116,6 +118,12 @@ public class ExportTask implements RequestHandler {
 
             final Request.StringParam pEnableConf =
                     request.getParam(PluginStringManager.getProperty("api.report.args.enableConf"));
+            
+            final Request.StringParam pEnableIssuesMultiRequests =
+                    request.getParam(PluginStringManager.getProperty("api.report.args.enableIssuesMultiRequests"));
+            
+            final Request.StringParam pMaxUrlSize =
+                    request.getParam(PluginStringManager.getProperty("api.report.args.maxUrlSize"));
 
             // Build SonarQube local URL
             String port = config.get("sonar.web.port").orElse(PluginStringManager.getProperty("plugin.defaultPort"));
@@ -177,6 +185,20 @@ public class ExportTask implements RequestHandler {
             }
             if(pEnableConfValue != null && (pEnableConfValue.equals(FALSE) || pEnableConfValue.equals(NO))) {
                 reportParams.add("-c");
+            }
+            
+            // add param for Workaround SonarQube 10'000 issues limitation
+            {
+	            // use multiple requests
+            	final String pEnableIssuesMultiRequestsValue = pEnableIssuesMultiRequests.getValue();
+	            if((null != pEnableIssuesMultiRequestsValue) && (pEnableIssuesMultiRequestsValue.equals(FALSE) || pEnableIssuesMultiRequestsValue.equals(NO))) {
+	            	reportParams.add("-i");
+	            }
+	            
+	            // SonarQube WebAPI max URL text-size
+	            final String pMaxUrlSizeValue = pMaxUrlSize.getValue();
+	            reportParams.add("-u");
+	            reportParams.add(pMaxUrlSizeValue);
             }
 
             // Execute report generation
