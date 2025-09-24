@@ -191,7 +191,7 @@ public class ExportTask implements RequestHandler {
             {
 	            // use multiple requests
             	final String pEnableIssuesMultiRequestsValue = pEnableIssuesMultiRequests.getValue();
-	            if((null != pEnableIssuesMultiRequestsValue) && (pEnableIssuesMultiRequestsValue.equals(FALSE) || pEnableIssuesMultiRequestsValue.equals(NO))) {
+	            if((null != pEnableIssuesMultiRequestsValue) && (!pEnableIssuesMultiRequestsValue.equals(FALSE) && !pEnableIssuesMultiRequestsValue.equals(NO))) {
 	            	reportParams.add("-i");
 	            }
 	            
@@ -221,7 +221,7 @@ public class ExportTask implements RequestHandler {
                 JsonWriter jsonWriter = new JsonWriter(writer);
             ) {
                 jsonWriter.beginObject();
-                jsonWriter.name("error").value(PluginStringManager.getProperty("api.tokenerror"));
+                jsonWriter.name("error").value(PluginStringManager.getProperty("api.exportError") +" "+ e.getMessage());
                 jsonWriter.endObject();
                 jsonWriter.flush();
             }

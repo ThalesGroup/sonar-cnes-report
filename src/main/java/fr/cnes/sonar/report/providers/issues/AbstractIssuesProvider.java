@@ -29,6 +29,7 @@ import fr.cnes.sonar.report.model.Rule;
 import java.lang.System.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -204,14 +205,40 @@ public abstract class AbstractIssuesProvider extends AbstractDataProvider {
 	        			// do nothing
 	        		} else if (subListOfComponentKeys.size() == 1) {
 	        			// get sub-components
-	        			final List<String> subComps = getSubComponents(subListOfComponentKeys.get(0), "children", "FIL,DIR");
+	        			final Map<String, String> subComps = getSubComponents(subListOfComponentKeys.get(0), "children", "FIL,DIR");
 	        			// check 
 	        			if (subComps.isEmpty()) {
 		        			String errMessage = StringManager.string(StringManager.FILES_OVERFLOW_MSG) +" : for ComponentKey=\""+ subListOfComponentKeys.get(0) +"\"";
 		        			throw new UnsupportedSonarqubeResponseException(errMessage);
 		        		}
+	        			// separate Components's keys according to their qualifier
+	        			final List<String> subComps_FIL = new ArrayList<String>();
+	        			final List<String> subComps_DIR = new ArrayList<String>();
+	        			for (final Map.Entry<String, String> currCompEntry : subComps.entrySet()) {
+	        				final String currCompQualifier = currCompEntry.getValue();
+	        				if (currCompQualifier.equals("FIL")) {
+	        					subComps_FIL.add(currCompEntry.getKey());
+	        				} else if (currCompQualifier.equals("DIR")) {
+	        					subComps_DIR.add(currCompEntry.getKey());
+	        				} else {
+	        					LOGGER.warning("Component qualifier \""+ currCompQualifier +"\", not supported.");
+	        				}
+	        			}
 	        			// split list of sub-compskeys in half
-	        			listOfCompsSubsets.addAll(ListUtils.splitListOfStrings(subComps));
+	        			// the goal here is to split but not too much
+	        			if (subComps_FIL.isEmpty() && subComps_DIR.isEmpty()) {
+	        				// do nothing
+	        			} else if (subComps_FIL.isEmpty()) {
+	        				// split the only list we got
+	        				listOfCompsSubsets.addAll(ListUtils.splitListOfStrings(subComps_DIR));
+	        			} else if (subComps_DIR.isEmpty()) {
+	        				// split the only list we got
+	        				listOfCompsSubsets.addAll(ListUtils.splitListOfStrings(subComps_FIL));
+	        			} else {
+	        				// split is the separation of FIL & DIR Components
+	        				listOfCompsSubsets.add(subComps_FIL);
+	        				listOfCompsSubsets.add(subComps_DIR);
+	        			}
 	        		} else {
 	        			// split list of sub-compskeys in half
 	        			listOfCompsSubsets.addAll(ListUtils.splitListOfStrings(subListOfComponentKeys));
@@ -280,30 +307,54 @@ public abstract class AbstractIssuesProvider extends AbstractDataProvider {
             	// transform json to Issue objects
             	final Map<String, String>[] tmp = (getGson().fromJson(jo.get(ISSUES), Map[].class));
             	// add them to the final result
-            	if (null != listOfMapOfIssues) {
+            	if (null != tmp) {
             		listOfMapOfIssues.addAll(Arrays.asList(tmp));
             	}
             }
             
             // check next results' pages
-            int number = (jo.get(TOTAL).getAsInt());
+            int number = jo.get(TOTAL).getAsInt();
 
             // check overflow
             if (number > MAXIMUM_ISSUES_LIMIT) {
+            	// when WebAPI-pages Overflow
                 number = MAXIMUM_ISSUES_LIMIT;
                 overflow.setValue(true);
+                
                 if (!continueOnError) {
-                	// no need to continue getting a partial list of issues from this Component
+                	// no need to continue iterating on other pages for this Component
+                	// ignore issues found in current page
                 	break;
+                } else {
+                	// store issues found in current page
+                	// and continue iterating on other pages for this Component
+                	if (Boolean.parseBoolean(confirmed)) {
+                		if (null != listOfUnconfirmedIssues) {
+                			listOfUnconfirmedIssues.addAll(Arrays.asList(issuesTemp));
+                		} else {
+                			// do nothing
+                		}
+                	} else {
+                		if (null != listOfConfirmedIssues) {
+                			listOfConfirmedIssues.addAll(Arrays.asList(issuesTemp));
+                		} else {
+                			// do nothing
+                		}
+                	}
                 }
             } else {
+            	// when all results fit in the WebAPI-pages
             	if (Boolean.parseBoolean(confirmed)) {
             		if (null != listOfUnconfirmedIssues) {
             			listOfUnconfirmedIssues.addAll(Arrays.asList(issuesTemp));
+            		} else {
+            			// do nothing
             		}
             	} else {
             		if (null != listOfConfirmedIssues) {
             			listOfConfirmedIssues.addAll(Arrays.asList(issuesTemp));
+            		} else {
+            			// do nothing
             		}
             	}
             }
@@ -325,22 +376,22 @@ public abstract class AbstractIssuesProvider extends AbstractDataProvider {
     }
     
     /**
-     * Generic getter for issues depending on their resolved status
+     * Generic getter for sub-Components's key & qualifier
      * 
      * @param componentID  Compliant with SonarQube WebAPI specs
      * @param strategy     Compliant with SonarQube WebAPI specs
      * @param qualifiers   Compliant with SonarQube WebAPI specs
      * 
-     * @return List of found sub-components's keys
+     * @return Map of found sub-components's keys and their Qualifier
      * 
      * @throws BadSonarQubeRequestException A request is not recognized by the
      *                                      server
      * @throws SonarQubeException           When SonarQube server is not callable.
      * @throws UnsupportedSonarqubeResponseException
      */
-    protected List<String> getSubComponents(final String componentID, final String strategy, final String qualifiers)
+    protected Map<String, String> getSubComponents(final String componentID, final String strategy, final String qualifiers)
             throws BadSonarQubeRequestException, SonarQubeException, UnsupportedSonarqubeResponseException {
-    	final List<String> files = new ArrayList<String>();
+    	final Map<String, String> mapOfSubComponents = new HashMap<String, String>();
     	
     	// stop condition
         boolean goOn = true;
@@ -360,8 +411,9 @@ public abstract class AbstractIssuesProvider extends AbstractDataProvider {
         		if (jsonElemFILE instanceof JsonObject) {
         			final Map<String, JsonElement> file = ((JsonObject) jsonElemFILE).asMap();
         			final JsonElement fileKey = file.get("key");
+        			final JsonElement fileQualifier = file.get("qualifier");
         			
-        			files.add(fileKey.getAsString());
+        			mapOfSubComponents.put(fileKey.getAsString(), fileQualifier.getAsString());
         		} else {
         			String message = "SonarQube WebAPI result not supported : \""+ jsonElemFILE.getClass().getName() +"\"";
         			throw new UnsupportedSonarqubeResponseException(message);
@@ -389,7 +441,7 @@ public abstract class AbstractIssuesProvider extends AbstractDataProvider {
         }
 
         // return the Files
-        return files;
+        return mapOfSubComponents;
     }
 
     /**

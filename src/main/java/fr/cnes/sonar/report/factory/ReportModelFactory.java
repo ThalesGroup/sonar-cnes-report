@@ -132,7 +132,7 @@ public class ReportModelFactory {
         	final List<Map<String, String>> listOfMapOfIssues = new ArrayList<Map<String, String>>();
         	
         	issuesProvider.getIssuesStructures("false", listOfConfirmedIssues, null                   , listOfMapOfIssues);
-        	issuesProvider.getIssuesStructures("true ", null                 , listOfUnconfirmedIssues, null);
+        	issuesProvider.getIssuesStructures("true",  null                 , listOfUnconfirmedIssues, null);
         	
         	report.setIssues(listOfConfirmedIssues);
         	report.setUnconfirmed(listOfUnconfirmedIssues);

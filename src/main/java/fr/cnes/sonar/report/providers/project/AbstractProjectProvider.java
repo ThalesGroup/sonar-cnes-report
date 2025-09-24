@@ -117,6 +117,11 @@ public abstract class AbstractProjectProvider extends AbstractDataProvider {
         if(null == project.getVersion()) {
             project.setVersion(StringManager.EMPTY);
         }
+        
+        // check branch nullity
+        if(null == project.getBranch()) {
+            project.setBranch(branch);
+        }
 
         return project;
     }
